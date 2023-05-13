@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Notify, Loading } from 'notiflix';
 import { Wrapper, ErrorText } from './App.styled';
 import Searchbar from './Searchbar/Searchbar';
@@ -12,95 +12,91 @@ Notify.init({
   fontSize: '14px',
 });
 
-export default class App extends Component {
-  state = {
-    images: [],
-    query: '',
-    page: 1,
-    isLoading: false,
-    showModal: false,
-    largeImage: '',
-    tags: '',
-    total: 0,
-    error: null,
-  };
+export default function App() {
+  const [images, setImages] = useState([]);
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [largeImage, setLargeImage] = useState('');
+  const [tags, setTags] = useState('');
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState(null);
 
-  componentDidUpdate(_, prevState) {
-    const { query, page } = this.state;
-    if (prevState.query !== query || prevState.page !== page) {
-      this.fetchImages(query, page);
+  useEffect(() => {
+    if (!query) {
+      return;
     }
-  }
 
-  fetchImages = async (query, page) => {
-    try {
-      this.setState({ isLoading: true });
-      const data = await API.fetchImages(query, page);
-      if (data.hits.length === 0) {
-        Notify.failure('We did not find anything for your request');
-        return;
+    const fetchImages = async (query, page) => {
+      try {
+        setIsLoading(true);
+        const data = await API.fetchImages(query, page);
+        if (data.hits.length === 0) {
+          Notify.failure('We did not find anything for your request');
+          return;
+        }
+        setImages(state => [...state, ...data.hits]);
+        setTotal(data.totalHits);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setIsLoading(false);
       }
-      this.setState(({ images }) => ({
-        images: [...images, ...data.hits],
-        total: data.totalHits,
-      }));
-    } catch (error) {
-      this.setState({ error });
-    } finally {
-      this.setState({ isLoading: false });
-    }
+    };
+
+    fetchImages(query, page);
+  }, [page, query]);
+
+  const handleSubmit = query => {
+    setQuery(query);
+    setPage(1);
+    setImages([]);
   };
 
-  handleSubmit = query => {
-    this.setState({ query, page: 1, images: [] });
+  const onLoadMore = () => setPage(state => state + 1);
+
+  const onOpenModal = (largeImage, tags) => {
+    setShowModal(true);
+    setLargeImage(largeImage);
+    setTags(tags);
   };
 
-  onLoadMore = () => {
-    this.setState(prev => ({ page: prev.page + 1 }));
+  const onCloseModal = () => {
+    setShowModal(false);
+    setLargeImage('');
+    setTags('');
   };
 
-  onOpenModal = (largeImage, tags) => {
-    this.setState({ showModal: true, largeImage, tags });
-  };
+  const countTotalPage = total / images.length;
 
-  onCloseModal = () => {
-    this.setState({ showModal: false, largeImage: '', tags: '' });
-  };
+  return (
+    <Wrapper>
+      <Searchbar onSubmit={handleSubmit} />
 
-  render() {
-    const { images, isLoading, total, error, showModal, largeImage, tags } =
-      this.state;
-    const totalPage = total / images.length;
+      {isLoading ? Loading.arrows({ svgSize: '240px' }) : Loading.remove()}
 
-    return (
-      <Wrapper>
-        <Searchbar onSubmit={this.handleSubmit} />
+      {images.length !== 0 && (
+        <ImageGallery images={images} onOpenModal={onOpenModal} />
+      )}
 
-        {/* {isLoading && <Loader />} */}
-        {isLoading ? Loading.arrows({ svgSize: '240px' }) : Loading.remove()}
+      {countTotalPage > 1 && !isLoading && images.length !== 0 && (
+        <Button onClick={onLoadMore} />
+      )}
 
-        {images.length !== 0 && (
-          <ImageGallery images={images} onOpenModal={this.onOpenModal} />
-        )}
+      {showModal && (
+        <Modal
+          largeImage={largeImage}
+          tags={tags}
+          onCloseModal={onCloseModal}
+        />
+      )}
 
-        {totalPage > 1 && !isLoading && images.length !== 0 && (
-          <Button onClick={this.onLoadMore} />
-        )}
-
-        {showModal && (
-          <Modal
-            largeImage={largeImage}
-            tags={tags}
-            onCloseModal={this.onCloseModal}
-          />
-        )}
-
-        {error && (
-          <ErrorText>
-            An unexpected error has occurred. Try to come back later.
-          </ErrorText>
-        )}
-      </Wrapper>
-    );
-  }
+      {error && (
+        <ErrorText>
+          An unexpected error has occurred. Try to come back later.
+        </ErrorText>
+      )}
+    </Wrapper>
+  );
 }
